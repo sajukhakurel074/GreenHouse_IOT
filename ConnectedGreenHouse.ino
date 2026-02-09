@@ -14,7 +14,7 @@
 
 // Project version
 #define APP_NAME        "ConnectedGreenhouse"
-#define APP_VERSION     "v1.0.0"
+#define APP_VERSION     "v1.1.0"
 #define APP_BUILD_DATE  __DATE__
 #define APP_BUILD_TIME  __TIME__
 
