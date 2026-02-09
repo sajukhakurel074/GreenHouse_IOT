@@ -1,3 +1,15 @@
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+//--------------------------------------------- Include Personal Libraries ---------------------------------------------//
+#include "gpio.h"
+#include "globals.h"
+#include "encoderTask.h"
+#include "displayTask.h"
+#include "i2cSensorsTask.h"
+#include "radioMqttTask.h"
+#include "RTOSQueues.h"
+#include "LogicTask.h"
 
 
 // Project version
@@ -12,6 +24,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
+  //--------------------------------------------- Version Print ---------------------------------------------//
   Serial.println();
   Serial.println("=================================");
   Serial.print("App: ");
@@ -23,6 +36,28 @@ void setup() {
   Serial.print(" ");
   Serial.println(APP_BUILD_TIME);
   Serial.println("=================================");
+
+
+  //--------------------------------------------- Initialze the GPIO's ---------------------------------------------//
+  initGPIO();
+  Serial.println("Main::setup initGPIO() completed.");
+
+  //--------------------------------------------- Modules Initialization ---------------------------------------------//
+  encoderInit();
+  displayInit();
+  sensorsInit();
+  logicInit();
+  Serial.println("Main::setup Module Initialization completed.");
+
+  //--------------------------------------------- Queues Creation ---------------------------------------------//
+  queuesCreateAll();
+
+  //--------------------------------------------- Task Creation ---------------------------------------------//
+  encoderStartTask();
+  displayStartTask();
+  sensorsStartTask();
+  logicStartTask();
+  Serial.println("Main::setup Creation of Tasks completed.");
 
 }
 
