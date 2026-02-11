@@ -26,7 +26,7 @@ void initGPIO() {
     digitalWrite (GPIO_VEXT_PIN, LOW); // ON 
 
     // Force OFF at startup 
-    analogWrite(GPIO_PWM_HEATER, 155 ) ;  
+    analogWrite(GPIO_PWM_HEATER, 0 ) ;  
     digitalWrite (GPIO_FAN , LOW ) ;  
     
 
