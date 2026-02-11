@@ -1,114 +1,112 @@
 #include "RTOSQueues.h"
 
 // ===============================
-// Queue handles
+// Queue handles (4 queues total as per professor architecture)
 // ===============================
-QueueHandle_t qSensorsDataModel = nullptr;
-QueueHandle_t qEncoder          = nullptr;
-QueueHandle_t qConfig           = nullptr;
-QueueHandle_t qModeCtx          = nullptr;
-QueueHandle_t qActuatorCmd      = nullptr;
+QueueHandle_t qEncoder          = nullptr;   // Encoder Queue  : Overwrite by Encoder controller, Peek by Display
+QueueHandle_t qSensorsDataModel = nullptr;   // Sensor Queue   : Overwrite by Sensors, Peek by Display + MQTT
+QueueHandle_t qConfig           = nullptr;   // Config Queue   : Overwrite by MQTT, Peek by Sensors + Display controller
+QueueHandle_t qModeCtx          = nullptr;   // Mode Queue     : Overwrite by Display, Peek by Logic controller
+
 
 // ===============================
 // Queue creation per component
 // ===============================
-bool queuesCreateSensors() {
-  if (qSensorsDataModel) return true;
-  qSensorsDataModel = xQueueCreate(1, sizeof(SensorData_t));   // latest snapshot
-  return (qSensorsDataModel != nullptr);
-}
-
 bool queuesCreateEncoder() {
-  if (qEncoder) return true;
-  qEncoder = xQueueCreate(10, sizeof(EncodeEvent_t));          // events
+  if (qEncoder) return true;                                   // Checks if already exists
+  qEncoder = xQueueCreate(1, sizeof(EncodeEvent_t));           // Snapshot queue (Overwrite + Peek) hence length = 1
+                                                               // Only latest encoder state/event is needed for display update
   return (qEncoder != nullptr);
 }
 
+bool queuesCreateSensors() {
+  if (qSensorsDataModel) return true;                          // Checks if already exists
+  qSensorsDataModel = xQueueCreate(1, sizeof(SensorData_t));   // Snapshot queue (Overwrite + Peek) hence length = 1
+                                                               // Only latest sensor snapshot is needed for display + mqtt
+  return (qSensorsDataModel != nullptr);
+}
+
 bool queuesCreateConfig() {
-  if (qConfig) return true;
-  qConfig = xQueueCreate(10, sizeof(ConfigCmd_t));             // commands
+  if (qConfig) return true;                                    // Checks if already exists
+  qConfig = xQueueCreate(1, sizeof(ConfigCmd_t));              // Snapshot queue (Overwrite + Peek) hence length = 1
+                                                               // Only latest config is relevant (new values overwrite old ones)
   return (qConfig != nullptr);
 }
 
 bool queuesCreateModeCtx() {
-  if (qModeCtx) return true;
-  qModeCtx = xQueueCreate(1, sizeof(ModeCtx_t));               // latest state for UI/radio
+  if (qModeCtx) return true;                                   // Checks if already exists
+  qModeCtx = xQueueCreate(1, sizeof(ModeCtx_t));               // Snapshot queue (Overwrite + Peek) hence length = 1
+                                                               // Display publishes latest mode selection, logic controller reads it
   return (qModeCtx != nullptr);
 }
 
-bool queuesCreateActuator() {
-  if (qActuatorCmd) return true;
-  qActuatorCmd = xQueueCreate(1, sizeof(ActuatorCmd_t));       // latest actuator command
-  return (qActuatorCmd != nullptr);
-}
-
-bool queuesCreateAll() {
-  return queuesCreateSensors() &&
-         queuesCreateEncoder() &&
+bool queuesCreateAll() {                // Creates all queues simultaneously, fails to create following queues if preceding one fails (fail case: Insufficient memory)
+  return queuesCreateEncoder() &&
+         queuesCreateSensors() &&
          queuesCreateConfig()  &&
-         queuesCreateModeCtx() &&
-         queuesCreateActuator();
+         queuesCreateModeCtx();
 }
 
-bool queuesReadyAll() {
-  return qSensorsDataModel && qEncoder && qConfig && qModeCtx && qActuatorCmd;
+bool queuesReadyAll() {                 // Checks if all queues are created (!=0)
+  return qEncoder && qSensorsDataModel && qConfig && qModeCtx;
 }
 
-// ===============================
-// APIs (safe wrappers)
-// ===============================
 
-// ---- Sensors DataModel ----
-bool sensorsModelWrite(const SensorData_t &d) {
-  if (!qSensorsDataModel) return false;
-  return (xQueueOverwrite(qSensorsDataModel, &d) == pdTRUE);
-}
+// -------- Loading and Fetching data in Queue -------- //
 
-bool sensorsModelPeek(SensorData_t &out, TickType_t to) {
-  if (!qSensorsDataModel) return false;
-  return (xQueuePeek(qSensorsDataModel, &out, to) == pdTRUE);
-}
-
-// ---- Encoder events ----
+// ---- Encoder Queue (Overwrite by Encoder controller, Peek by Display) ----
 bool encoderSendEvent(EncodeEvent_t e, TickType_t to) {
-  if (!qEncoder) return false;
-  return (xQueueSend(qEncoder, &e, to) == pdTRUE);
+  (void)to;                                                     // Not required for overwrite API
+  if (!qEncoder) return false;                                  // Checks queue availability before adding data
+  return (xQueueOverwrite(qEncoder, &e) == pdTRUE);             // Overwrites previous encoder value/event -> always keeps latest (Snapshot)
+                                                               // Recommended: Producer >>> Encoder controller task
 }
 
 bool encoderRecvEvent(EncodeEvent_t &out, TickType_t to) {
-  if (!qEncoder) return false;
-  return (xQueueReceive(qEncoder, &out, to) == pdTRUE);
+  if (!qEncoder) return false;                                  // Checks queue availability before reading data
+  return (xQueuePeek(qEncoder, &out, to) == pdTRUE);            // Reads latest encoder event without removing it (Peek)
+                                                               // Recommended: Consumer >>> Display task
 }
 
-// ---- Config commands ----
+
+// ---- Sensors DataModel (Overwrite by Sensors, Peek by Display + MQTT) ----
+bool sensorsModelWrite(const SensorData_t &d) {
+  if (!qSensorsDataModel) return false;                         // Checks queue availability before adding data
+  return (xQueueOverwrite(qSensorsDataModel, &d) == pdTRUE);    // Overwrites previous snapshot -> always keeps latest sensor values (Snapshot)
+                                                               // Recommended: Producer >>> Sensors task
+}
+
+bool sensorsModelPeek(SensorData_t &out, TickType_t to) {
+  if (!qSensorsDataModel) return false;                         // Checks queue availability before reading data
+  return (xQueuePeek(qSensorsDataModel, &out, to) == pdTRUE);   // Reads latest snapshot without removing it (Peek)
+                                                               // Recommended: Consumers >>> Display task + MQTT task
+}
+
+
+// ---- Config commands (Overwrite by MQTT, Peek by Sensors + Display controller) ----
 bool configSend(const ConfigCmd_t &cmd, TickType_t to) {
-  if (!qConfig) return false;
-  return (xQueueSend(qConfig, &cmd, to) == pdTRUE);
+  (void)to;                                                     // Not required for overwrite API
+  if (!qConfig) return false;                                   // Checks queue availability before adding data
+  return (xQueueOverwrite(qConfig, &cmd) == pdTRUE);            // Overwrites previous config -> always keeps latest config (Snapshot)
+                                                               // Recommended: Producer >>> MQTT task
 }
 
 bool configRecv(ConfigCmd_t &out, TickType_t to) {
-  if (!qConfig) return false;
-  return (xQueueReceive(qConfig, &out, to) == pdTRUE);
+  if (!qConfig) return false;                                   // Checks queue availability before reading data
+  return (xQueuePeek(qConfig, &out, to) == pdTRUE);             // Reads latest config without removing it (Peek)
+                                                               // Recommended: Consumers >>> Sensors controller + Display controller
 }
 
-// ---- Mode context ----
+
+// ---- Mode context (Overwrite by Display, Peek by Logic controller) ----
 bool modeCtxWrite(const ModeCtx_t &ctx) {
-  if (!qModeCtx) return false;
-  return (xQueueOverwrite(qModeCtx, &ctx) == pdTRUE);
+  if (!qModeCtx) return false;                                  // Checks queue availability before adding data
+  return (xQueueOverwrite(qModeCtx, &ctx) == pdTRUE);           // Overwrites previous mode -> always keeps latest mode selection/state (Snapshot)
+                                                               // Recommended: Producer >>> Display task
 }
 
 bool modeCtxPeek(ModeCtx_t &out, TickType_t to) {
-  if (!qModeCtx) return false;
-  return (xQueuePeek(qModeCtx, &out, to) == pdTRUE);
-}
-
-// ---- Actuator command ----
-bool actuatorWrite(const ActuatorCmd_t &cmd) {
-  if (!qActuatorCmd) return false;
-  return (xQueueOverwrite(qActuatorCmd, &cmd) == pdTRUE);
-}
-
-bool actuatorPeek(ActuatorCmd_t &out, TickType_t to) {
-  if (!qActuatorCmd) return false;
-  return (xQueuePeek(qActuatorCmd, &out, to) == pdTRUE);
+  if (!qModeCtx) return false;                                  // Checks queue availability before reading data
+  return (xQueuePeek(qModeCtx, &out, to) == pdTRUE);            // Reads latest mode without removing it (Peek)
+                                                               // Recommended: Consumer >>> Logic controller task
 }

@@ -44,8 +44,8 @@ void setup() {
 
   //--------------------------------------------- Modules Initialization ---------------------------------------------//
   encoderInit();
-  displayInit();
   sensorsInit();
+  displayInit();
   logicInit();
   Serial.println("Main::setup Module Initialization completed.");
 
@@ -54,8 +54,8 @@ void setup() {
 
   //--------------------------------------------- Task Creation ---------------------------------------------//
   encoderStartTask();
-  displayStartTask();
   sensorsStartTask();
+  displayStartTask();
   logicStartTask();
   Serial.println("Main::setup Creation of Tasks completed.");
 
