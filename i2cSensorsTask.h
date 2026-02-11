@@ -10,6 +10,7 @@
 #define SHT31_I2C_ADDR  0x44
 #define BH1750_I2C_ADDR 0x23
 #define SENSOR_READ_INTERVAL_MS 1000    // Reduced 10000 to 1000, was too slow response time
+                                        // this rate would be finalizaed after discussion with MQTT team
 
 void sensorsInit();
 void sensorsStartTask();
