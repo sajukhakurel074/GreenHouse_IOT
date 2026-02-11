@@ -5,6 +5,7 @@
 #include "RTOSQueues.h"   
 #include "globals.h"
 
+
 static TaskHandle_t hEncoder = nullptr;
 
 static void encoderTask(void *pv) {

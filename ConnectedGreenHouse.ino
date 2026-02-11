@@ -47,6 +47,7 @@ void setup() {
   sensorsInit();
   displayInit();
   logicInit();
+  mqttInit(); 
   Serial.println("Main::setup Module Initialization completed.");
 
   //--------------------------------------------- Queues Creation ---------------------------------------------//
@@ -57,6 +58,7 @@ void setup() {
   sensorsStartTask();
   displayStartTask();
   logicStartTask();
+  mqttStartTask();
   Serial.println("Main::setup Creation of Tasks completed.");
 
 }

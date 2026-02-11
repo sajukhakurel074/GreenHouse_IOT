@@ -27,3 +27,4 @@ void displayInit() {
 void displayStartTask() {
   xTaskCreate(displayTask, "Display", 4096, nullptr, 1, &hDisplay);
 }
+
