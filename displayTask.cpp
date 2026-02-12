@@ -93,7 +93,6 @@ static void displayTask(void *pv) {
     // Lire capteurs
     sensorsModelPeek(sensorData, 0);
 
-
     // Récupérer événement encoder
     if (encoderRecvEvent(encoderEvent, 0)) {
 
@@ -101,22 +100,22 @@ static void displayTask(void *pv) {
 
         case ENC_UP:
           if (selected > 0) selected--;
-          delay(100);
+          vTaskDelay(pdMS_TO_TICKS(100));
           break;
 
         case ENC_DOWN:
           if (selected < menuSize) selected++;
-          delay(100);
+          vTaskDelay(pdMS_TO_TICKS(100));
           break;
 
         case ENC_SELECT:
           Serial.printf("Selected: %s\n", menuItems[selected]);
-          delay(100);
+          vTaskDelay(pdMS_TO_TICKS(100));
           break;
 
         case ENC_SELECT_LONG:
           selected = 0;
-          delay(100);
+          vTaskDelay(pdMS_TO_TICKS(100));
           break;
       }
     }
