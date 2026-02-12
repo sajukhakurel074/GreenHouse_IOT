@@ -54,6 +54,9 @@ typedef struct {
 
   uint32_t   lastUpdate_ms;  // Timestamp of last mode update
   char       modeLabel[16];  // Optional display label (e.g., "AUTO", "MANUAL") (To be discussed: required or redundant)
+
+  // Thresholds
+
 } ModeCtx_t;                 // Snapshot queue: Overwrite by Display, Peek by Logic
 
 
@@ -83,6 +86,16 @@ typedef enum : uint8_t {
   CFG_SET_MANUAL_HEATER,     // Manual heater control (on/off + PWM)
   CFG_SET_SAMPLING_PERIOD    // Change sensor sampling interval
 } ConfigCmdType_t;           // To be discussed: Which commands are mandatory in MVP
+
+
+typedef enum{
+  Actuator_Alarm_None = 0,
+  Fan_Saturation,
+  Heater_Saturation,
+  Control_Oscillation,
+  Conflicting_Actuation,
+  Safe_Mode_Active
+}ActuatorAlarm_t;
 
 
 // ===============================

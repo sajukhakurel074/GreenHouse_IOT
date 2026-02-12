@@ -7,6 +7,7 @@ QueueHandle_t qEncoder          = nullptr;   // Encoder Queue  : Overwrite by En
 QueueHandle_t qSensorsDataModel = nullptr;   // Sensor Queue   : Overwrite by Sensors, Peek by Display + MQTT
 QueueHandle_t qConfig           = nullptr;   // Config Queue   : Overwrite by MQTT, Peek by Sensors + Display controller
 QueueHandle_t qModeCtx          = nullptr;   // Mode Queue     : Overwrite by Display, Peek by Logic controller
+QueueHandle_t qAlarm            = nullptr;   // Actuator Alarm Queue     : Overwrite by Logic Controller, Peek by MQTT
 
 
 // ===============================
@@ -40,15 +41,23 @@ bool queuesCreateModeCtx() {
   return (qModeCtx != nullptr);
 }
 
+bool queuesCreateActuatorAlarm() {
+  if (qAlarm) return true;                                   // Checks if already exists
+  qAlarm = xQueueCreate(1, sizeof(ActuatorAlarm_t));               // Snapshot queue (Overwrite + Peek) hence length = 1
+                                                               // Logic controller publishes alarm for faults in actuator, MQTT reads it
+  return (qAlarm != nullptr);
+}
+
 bool queuesCreateAll() {                // Creates all queues simultaneously, fails to create following queues if preceding one fails (fail case: Insufficient memory)
   return queuesCreateEncoder() &&
          queuesCreateSensors() &&
          queuesCreateConfig()  &&
-         queuesCreateModeCtx();
+         queuesCreateModeCtx() &&
+         queuesCreateActuatorAlarm();
 }
 
 bool queuesReadyAll() {                 // Checks if all queues are created (!=0)
-  return qEncoder && qSensorsDataModel && qConfig && qModeCtx;
+  return qEncoder && qSensorsDataModel && qConfig && qModeCtx && qAlarm;
 }
 
 
@@ -109,4 +118,17 @@ bool modeCtxPeek(ModeCtx_t &out, TickType_t to) {
   if (!qModeCtx) return false;                                  // Checks queue availability before reading data
   return (xQueuePeek(qModeCtx, &out, to) == pdTRUE);            // Reads latest mode without removing it (Peek)
                                                                // Recommended: Consumer >>> Logic controller task
+}
+
+// ---- Actuator Alarm (Overwrite by Logic Control, Peek by MQTT) ----
+bool modeCtxWrite(const ActuatorAlarm_t &ctx) {
+  if (!qAlarm) return false;                                  // Checks queue availability before adding data
+  return (xQueueOverwrite(qAlarm, &ctx) == pdTRUE);           // Overwrites previous mode -> always keeps latest mode selection/state (Snapshot)
+                                                               // Recommended: Producer >>> Logic Controller
+}
+
+bool modeCtxPeek(ActuatorAlarm_t &out, TickType_t to) {
+  if (!qAlarm) return false;                                  // Checks queue availability before reading data
+  return (xQueuePeek(qAlarm, &out, to) == pdTRUE);            // Reads latest mode without removing it (Peek)
+                                                               // Recommended: Consumer >>> MQTT
 }
