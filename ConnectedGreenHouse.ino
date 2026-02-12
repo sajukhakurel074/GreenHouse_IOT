@@ -42,6 +42,9 @@ void setup() {
   initGPIO();
   Serial.println("Main::setup initGPIO() completed.");
 
+  //--------------------------------------------- Queues Creation ---------------------------------------------//
+  queuesCreateAll();
+
   //--------------------------------------------- Modules Initialization ---------------------------------------------//
   encoderInit();
   sensorsInit();
@@ -49,9 +52,6 @@ void setup() {
   logicInit();
   mqttInit(); 
   Serial.println("Main::setup Module Initialization completed.");
-
-  //--------------------------------------------- Queues Creation ---------------------------------------------//
-  queuesCreateAll();
 
   //--------------------------------------------- Task Creation ---------------------------------------------//
   encoderStartTask();
