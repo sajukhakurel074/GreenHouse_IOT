@@ -73,9 +73,9 @@ static void encoderTask(void *pv) {
 
     // --- Heartbeat every 5 seconds ---
     if (millis() - lastDiagMs > 5000) {
-      Serial.printf("[ENC] CLK=%d DT=%d BTN=%d pos=%d\n",
-                    digitalRead(GPIO_ENC_CLK), digitalRead(GPIO_ENC_DT),
-                    digitalRead(GPIO_BOARD_BP), pEncoder->getPosition());
+      //Serial.printf("[ENC] CLK=%d DT=%d BTN=%d pos=%d\n",
+       //             digitalRead(GPIO_ENC_CLK), digitalRead(GPIO_ENC_DT),
+        //            digitalRead(GPIO_BOARD_BP), pEncoder->getPosition());
       lastDiagMs = millis();
     }
 

@@ -58,7 +58,7 @@ void setup() {
   sensorsStartTask();
   displayStartTask();
   logicStartTask();
-  //mqttStartTask();
+  mqttStartTask();
   Serial.println("Main::setup Creation of Tasks completed.");
 
 }

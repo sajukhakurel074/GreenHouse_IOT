@@ -15,8 +15,8 @@ static void applyOutputs(bool fanOn, bool ledOn, uint8_t heaterPwm)
     digitalWrite(GPIO_BOARD_LED, ledOn ? HIGH : LOW);        // Board LED indicator
     analogWrite(GPIO_PWM_HEATER, heaterPwm);                 // PWM on GPIO_PWM_HEATER (J3:18)
 
-    Serial.printf("[LOGIC] Outputs -> Fan:%s  Heater PWM:%d  LED:%s\n",
-                  fanOn ? "ON" : "OFF", heaterPwm, ledOn ? "ON" : "OFF");
+    //Serial.printf("[LOGIC] Outputs -> Fan:%s  Heater PWM:%d  LED:%s\n",
+     //             fanOn ? "ON" : "OFF", heaterPwm, ledOn ? "ON" : "OFF");
 }
 
 static void logicTask(void *pv)
@@ -64,8 +64,8 @@ static void logicTask(void *pv)
 
         // Log only when state changes (avoid serial spam)
         if (firstRun || ctx.fanOn != prevCtx.fanOn || ctx.heaterPwm != prevCtx.heaterPwm || ctx.mode != prevCtx.mode) {
-            Serial.printf("[LOGIC] Mode:%d Fan:%s Heater PWM:%d\n",
-                          ctx.mode, fanOn ? "ON" : "OFF", heater);
+            //Serial.printf("[LOGIC] Mode:%d Fan:%s Heater PWM:%d\n",
+                          //ctx.mode, fanOn ? "ON" : "OFF", heater);
             prevCtx  = ctx;
             firstRun = false;
         }
