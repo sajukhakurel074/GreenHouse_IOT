@@ -48,6 +48,7 @@ typedef struct {
 
   bool       fanOn;          // Current fan state (To be discussed: controlled by Logic only?)
   bool       heaterOn;       // Current heater state
+  bool       ledOn;
 
   uint8_t    fanPwm;         // Fan power level (0–100 %) (To be discussed: range validation)
   uint8_t    heaterPwm;      // Heater power level (0–100 %)
@@ -111,7 +112,8 @@ typedef struct {
   float           luxTarget;      // Desired light threshold
 
   bool            fanOn;          // Manual override state
-  bool            heaterOn;
+  bool            heaterOn;   
+  bool            ledOn;
 
   uint8_t         fanPwm;         // Manual PWM (0–100 %) (To be validated in Logic layer)
   uint8_t         heaterPwm;
