@@ -36,82 +36,98 @@ static bool g_sht_ok = false;
 static bool g_lux_ok = false;
 
 /**
- * Validates sensor health and attempts re-initialization if communication is lost.
+ * Manually pulses the SCL line to un-stick any sensors holding SDA low.
+ * This is a hardware-level "clear" for the I2C bus.
  */
-bool checkSensorHealth() {
-    // SHT31 Check: Call read() to verify the sensor is actually responding
-    bool sht_ok = sht31.read(); 
-    if (!sht_ok) {
-        Serial.println("Sensors::health SHT31 re-init...");
-        g_sht_ok = sht31.begin();
-        if (g_sht_ok) {
-            sht31.heatOff(); // Standardized check to ensure heater is off
+void recoverI2CBus() {
+    Serial.println("Sensors::bus Pulse recovery sequence...");
+    pinMode(GPIO_I2C_1_SCL, OUTPUT);
+    pinMode(GPIO_I2C_1_SDA, INPUT_PULLUP);
+    
+    for (int i = 0; i < 10; i++) {
+        digitalWrite(GPIO_I2C_1_SCL, LOW);
+        delayMicroseconds(5);
+        digitalWrite(GPIO_I2C_1_SCL, HIGH);
+        delayMicroseconds(5);
+    }
+}
+
+/**
+ * Scans the bus to verify hardware presence.
+ */
+void scanBus() {
+    Serial.println("Sensors::scan Scanning Bus #1...");
+    for (uint8_t i = 1; i < 127; i++) {
+        I2CSensors.beginTransmission(i);
+        if (I2CSensors.endTransmission() == 0) {
+            Serial.printf("Sensors::scan Found device at 0x%02X\n", i);
         }
+    }
+}
+
+bool checkSensorHealth() {
+    // SHT31 Health Check
+    if (!sht31.read()) {
+        Serial.println("Sensors::health SHT31 fail - attempting soft reset");
+        // Manual I2C Reset command (standard for SHT3x)
+        I2CSensors.beginTransmission(ADDR_SHT31);
+        I2CSensors.write(0x30); 
+        I2CSensors.write(0xA2); 
+        I2CSensors.endTransmission();
+        vTaskDelay(pdMS_TO_TICKS(50));
+        g_sht_ok = sht31.begin();
     } else {
         g_sht_ok = true;
     }
 
-    // BH1750 Check: Attempt a dummy read
+    // BH1750 Health Check
     float lx = lux.getLux();
-    bool lux_ok = (!isnan(lx) && lx >= 0.0f);
-    if (!lux_ok) {
-        Serial.println("Sensors::health BH1750 re-init...");
+    g_lux_ok = (!isnan(lx) && lx >= 0.0f);
+    if (!g_lux_ok) {
         g_lux_ok = lux.begin();
-    } else {
-        g_lux_ok = true;
     }
 
     return (g_sht_ok && g_lux_ok);
 }
 
-/**
- * Main RTOS Task
- */
 static void sensorsTask(void *pv) {
     Serial.println("Rtos::Task Sensors > started.");
-    
-    // Give I2C bus time to settle
     vTaskDelay(pdMS_TO_TICKS(500));
     checkSensorHealth();
 
     while (1) {
         SensorData_t d{};
         d.ts_ms = millis();
-        bool sht_read_success = false;
+        bool sht_valid = false;
 
-        // 1. SHT31 Measurement
-        if (g_sht_ok) {
-            // Trigger the I2C transaction
-            if (sht31.read()) {
-                d.temperature = sht31.getTemperature();
-                d.humidity    = sht31.getHumidity();
-                sht_read_success = true;
-            } else {
-                d.temperature = -999.0f;
-                d.humidity    = -999.0f;
-            }
+        // 1. Read SHT31
+        if (g_sht_ok && sht31.read()) {
+            d.temperature = sht31.getTemperature();
+            d.humidity    = sht31.getHumidity();
+            sht_valid = true;
+        } else {
+            d.temperature = -999.0f;
+            d.humidity    = -999.0f;
         }
 
-        // 2. BH1750 Measurement
+        // 2. Read BH1750
         if (g_lux_ok) {
             d.lux = lux.getLux();
         } else {
             d.lux = -1.0f;
         }
 
-        // Validation Logic
-        bool valid = (sht_read_success && d.lux >= 0.0f);
-
-        if (valid) {
+        // Send to model if data is valid
+        if (sht_valid || d.lux >= 0.0f) {
             sensorsModelWrite(d);
             readCount++;
             if ((readCount % 5) == 0) {
-                Serial.printf("Sensors::Data [OK] T=%.2f C, H=%.2f %%, L=%.1f\n", 
-                               d.temperature, d.humidity, d.lux);
+                Serial.printf("Sensors::#%lu T=%.2fC H=%.1f%% L=%.1f\n", 
+                               readCount, d.temperature, d.humidity, d.lux);
             }
         } else {
             errorCount++;
-            Serial.printf("Sensors::Error #%lu! Attempting recovery...\n", errorCount);
+            Serial.printf("Sensors::Critical Error #%lu\n", errorCount);
             checkSensorHealth();
         }
 
@@ -120,24 +136,30 @@ static void sensorsTask(void *pv) {
 }
 
 void sensorsInit() {
-    Serial.println("Sensors::init Starting I2C Bus 1...");
+    Serial.println("Sensors::init Starting I2C Bus...");
 
-    // Initialize I2C Bus 1
+    // 1. Hardware Bus Recovery
+    recoverI2CBus();
+
+    // 2. Start I2C Controller
     I2CSensors.begin(GPIO_I2C_1_SDA, GPIO_I2C_1_SCL, 100000);
+    I2CSensors.setTimeOut(50); 
 
-    // Initialize SHT31
+    // 3. Scan for hardware presence
+    scanBus();
+
+    // 4. Init SHT31
     g_sht_ok = sht31.begin();
     if(g_sht_ok) {
-        sht31.heatOff(); 
         Serial.println("Sensors::SHT31 [OK]");
     } else {
         Serial.println("Sensors::SHT31 [FAIL]");
     }
 
-    // Initialize BH1750
+    // 5. Init BH1750
     g_lux_ok = lux.begin();
-    if(g_lux_ok) {
-        lux.setContHighRes(); 
+    if (g_lux_ok) {
+        lux.setContHighRes();
         Serial.println("Sensors::BH1750 [OK]");
     } else {
         Serial.println("Sensors::BH1750 [FAIL]");
@@ -146,7 +168,4 @@ void sensorsInit() {
 
 void sensorsStartTask() {
     xTaskCreate(sensorsTask, "Sensors_Task", 4096, nullptr, 2, &hSensors);
-    if (hSensors) {
-        Serial.println("Sensors Task Live.");
-    }
 }
