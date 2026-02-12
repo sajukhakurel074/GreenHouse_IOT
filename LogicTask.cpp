@@ -11,10 +11,12 @@ static TaskHandle_t hLogic = nullptr;
 
 static void applyOutputs(bool fanOn, bool ledOn, uint8_t heaterPwm)
 {
-    digitalWrite(GPIO_FAN, fanOn ? HIGH : LOW);        // Digital control
-    digitalWrite(GPIO_BOARD_LED, ledOn ? HIGH : LOW);        // Digital control
+    digitalWrite(GPIO_FAN, fanOn ? HIGH : LOW);              // MOSFET on GPIO_FAN (J3:17)
+    digitalWrite(GPIO_BOARD_LED, ledOn ? HIGH : LOW);        // Board LED indicator
+    analogWrite(GPIO_PWM_HEATER, heaterPwm);                 // PWM on GPIO_PWM_HEATER (J3:18)
 
-    analogWrite(GPIO_PWM_HEATER, heaterPwm);               // PWM control (0–255 depending on config)
+    Serial.printf("[LOGIC] Outputs -> Fan:%s  Heater PWM:%d  LED:%s\n",
+                  fanOn ? "ON" : "OFF", heaterPwm, ledOn ? "ON" : "OFF");
 }
 
 static void logicTask(void *pv)
@@ -23,9 +25,12 @@ static void logicTask(void *pv)
     // ConfigCmd_t   config{};
     // SensorData_t  sensors{};
     ModeCtx_t     ctx{};
+    ModeCtx_t     prevCtx{};        // Track previous state to log only on change
+    bool          firstRun = true;
+
     while (1)
     {
-        //configRecv(config, 0);   // Peek latest config (non-blocking)
+        // Peek latest mode context written by DisplayTask
         modeCtxPeek(ctx, 0);
 
         bool fanOn     = false;
@@ -43,44 +48,27 @@ static void logicTask(void *pv)
             case MODE_MANUAL:
                 fanOn  = ctx.fanOn;
                 heater = ctx.heaterPwm;
-                ledOn  = true;                 
+                ledOn  = (fanOn || heater > 0);  // LED on when any actuator is active
                 break;
 
             case MODE_AUTO:
-                // ledOn = true;
-                
-                // if (sensors.temperature < ctx.tempTarget_C)
-                // {
-                //     heater = 180;              
-                //     fanOn  = false;
-                // }
-                // else
-                // {
-                //     heater = 0;
-                //     fanOn  = true;
-                // }
+                // Future: automatic control based on sensor readings
+                ledOn = true;
                 break;
 
             default:
                 break;
         }
+
         applyOutputs(fanOn, ledOn, heater);
 
-        // ctx.mode           = config.mode;
-        // ctx.alarm          = ALARM_NONE;       // Can expand later
-        // ctx.fanOn          = fanOn;
-        // ctx.heaterOn       = (heater > 0);
-        // ctx.fanPwm         = 0;
-        // ctx.heaterPwm      = heater;
-        // ctx.lastUpdate_ms  = millis();
-
-        // strncpy(ctx.modeLabel,
-        //         (config.mode == MODE_OFF)   ? "Mode Off" :
-        //         (config.mode == MODE_AUTO)  ? "Mode Auto" :
-        //                                       "Mode Manual",
-        //         sizeof(ctx.modeLabel)-1);
-
-        // modeCtxWrite(ctx);                   // Overwrite latest system state
+        // Log only when state changes (avoid serial spam)
+        if (firstRun || ctx.fanOn != prevCtx.fanOn || ctx.heaterPwm != prevCtx.heaterPwm || ctx.mode != prevCtx.mode) {
+            Serial.printf("[LOGIC] Mode:%d Fan:%s Heater PWM:%d\n",
+                          ctx.mode, fanOn ? "ON" : "OFF", heater);
+            prevCtx  = ctx;
+            firstRun = false;
+        }
 
         vTaskDelay(pdMS_TO_TICKS(200));
     }
