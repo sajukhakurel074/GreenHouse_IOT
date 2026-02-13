@@ -48,6 +48,7 @@ typedef struct {
 
   bool       fanOn;          // Current fan state (To be discussed: controlled by Logic only?)
   bool       heaterOn;       // Current heater state
+  bool       ledOn;
 
   uint8_t    fanPwm;         // Fan power level (0–100 %) (To be discussed: range validation)
   uint8_t    heaterPwm;      // Heater power level (0–100 %)
@@ -105,13 +106,25 @@ typedef struct {
   ConfigCmdType_t type;      // Type of configuration command (Producer: MQTT, Consumer: Sensors + Display + Logic)
 
   Mode_t          mode;      // Mode selection (Used when type == CFG_SET_MODE)
+  uint8_t         accessCode;     // 0 = LOCAL (encoder), non-zero = SERVER (MQTT)
+
 
   float           tempTarget_C;   // Desired temperature setpoint (To be discussed: allowed range)
   float           humTarget_RH;   // Desired humidity setpoint
   float           luxTarget;      // Desired light threshold
+    // Server tuning (AUTO logic)
+  float           heaterRange_C;      // ± range around heater setpoint
+  float           heaterHyst_C;       // hysteresis safeband
+  uint16_t        heaterPersist_s;    // persistence time (seconds)
+
+  float           fanRange_RH;        // ± range around fan setpoint
+  float           fanHyst_RH;         // hysteresis safeband
+  uint16_t        fanPersist_s;       // persistence time (seconds)
+
 
   bool            fanOn;          // Manual override state
-  bool            heaterOn;
+  bool            heaterOn;   
+  bool            ledOn;
 
   uint8_t         fanPwm;         // Manual PWM (0–100 %) (To be validated in Logic layer)
   uint8_t         heaterPwm;

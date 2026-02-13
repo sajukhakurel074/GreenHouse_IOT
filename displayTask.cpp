@@ -11,7 +11,6 @@
 
 #define PRG_BUTTON 0
 
-
 static TaskHandle_t hDisplay = nullptr;
 
 #ifdef WIRELESS_STICK_V3
@@ -19,8 +18,6 @@ static SSD1306Wire display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_64_32, RST
 #else
 static SSD1306Wire display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);  // addr , freq , i2c group , resolution , rst
 #endif
-
-
 
 // ===== MENU =====
 const char *menuItems[] = {
@@ -40,7 +37,8 @@ static int selected = 0;
 static bool fanState    = false;
 static bool heaterState = false;
 
-
+// Current heater PWM (for ramping)
+static uint8_t heaterPwmCurrent = 0;
 
 // =======================
 // ===== DRAW MENU =======
@@ -79,10 +77,10 @@ void drawMenu(const SensorData_t &sensors) {
       case 0: value = String(sensors.temperature, 1) + "C"; break;
       case 1: value = String(sensors.humidity, 1) + "%"; break;
       case 2: value = String((int)sensors.lux); break;
-      case 3: value = fanState    ? "[*]" : ""; break;  // Fan ON
-      case 4: value = !fanState   ? "[*]" : ""; break;  // Fan OFF
-      case 5: value = heaterState ? "[*]" : ""; break;  // Heater ON
-      case 6: value = !heaterState? "[*]" : ""; break;  // Heater OFF
+      case 3: value = fanState     ? "[*]" : ""; break;  // Fan ON
+      case 4: value = (!fanState)  ? "[*]" : ""; break;  // Fan OFF
+      case 5: value = heaterState  ? "[*]" : ""; break;  // Heater ON
+      case 6: value = (!heaterState)? "[*]" : ""; break; // Heater OFF
     }
 
     if (i == selected) {
@@ -100,26 +98,71 @@ void drawMenu(const SensorData_t &sensors) {
   display.display();
 }
 
-// =======================
-// ===== DISPLAY TASK ====
-// =======================
-
-// Helper: send current actuator state to LogicTask via qModeCtx
-static void sendActuatorCommand() {
+// =====================================
+// ===== SEND MODECTX (ONE-SHOT) ========
+// =====================================
+static void sendActuatorCommand()
+{
   ModeCtx_t ctx = {};
-  ctx.mode        = MODE_MANUAL;
-  ctx.fanOn       = fanState;
-  ctx.heaterOn    = heaterState;
-  ctx.heaterPwm   = heaterState ? 200 : 0;   // PWM 0-255 (adjust as needed)
-  ctx.fanPwm      = fanState    ? 255 : 0;
+  ctx.mode          = MODE_MANUAL;
+  ctx.fanOn         = fanState;
+  ctx.heaterOn      = heaterState;
+  ctx.heaterPwm     = heaterState ? heaterPwmCurrent : 0;   // use current PWM
+  ctx.fanPwm        = fanState ? 255 : 0;
   ctx.lastUpdate_ms = millis();
   strncpy(ctx.modeLabel, "MANUAL", sizeof(ctx.modeLabel) - 1);
 
   modeCtxWrite(ctx);
-  Serial.printf("[DISPLAY] Command sent -> Fan:%s  Heater:%s\n",
-                fanState ? "ON" : "OFF", heaterState ? "ON" : "OFF");
+
+  Serial.printf("[DISPLAY] Command sent -> Fan:%s  Heater:%s  HeaterPWM:%d\n",
+                fanState ? "ON" : "OFF",
+                heaterState ? "ON" : "OFF",
+                (int)ctx.heaterPwm);
 }
 
+// =====================================
+// ===== HEATER PWM RAMP FUNCTION =======
+// =====================================
+static void rampHeaterTo(uint8_t targetPwm)
+{
+  const uint8_t step = 10;           // 200 / 5 steps = 40
+  const uint16_t stepDelay = 150;    // ms between steps
+
+  if (targetPwm > heaterPwmCurrent) {
+    // Ramp UP
+    for (uint16_t p = heaterPwmCurrent; p <= targetPwm; p += step) {
+      heaterPwmCurrent = (uint8_t)p;
+      heaterState = (heaterPwmCurrent > 0);
+
+      sendActuatorCommand();
+      vTaskDelay(pdMS_TO_TICKS(stepDelay));
+    }
+  } else if (targetPwm < heaterPwmCurrent) {
+    // Ramp DOWN
+    for (int p = heaterPwmCurrent; p >= (int)targetPwm; p -= step) {
+      heaterPwmCurrent = (uint8_t)p;
+      heaterState = (heaterPwmCurrent > 0);
+
+      sendActuatorCommand();
+      vTaskDelay(pdMS_TO_TICKS(stepDelay));
+    }
+  } else {
+    // Already at target
+    heaterState = (heaterPwmCurrent > 0);
+    sendActuatorCommand();
+  }
+
+  // Ensure exact final value (in case rounding misses)
+  heaterPwmCurrent = targetPwm;
+  heaterState = (heaterPwmCurrent > 0);
+  sendActuatorCommand();
+
+  Serial.printf("[DISPLAY] Heater ramped to %d\n", (int)heaterPwmCurrent);
+}
+
+// =======================
+// ===== DISPLAY TASK ====
+// =======================
 static void displayTask(void *pv) {
   Serial.println("Rtos::Task Display > started.");
 
@@ -127,6 +170,9 @@ static void displayTask(void *pv) {
   EncodeEvent_t encoderEvent;
 
   // Send initial state (everything OFF)
+  fanState = false;
+  heaterState = false;
+  heaterPwmCurrent = 0;
   sendActuatorCommand();
 
   while (1) {
@@ -158,18 +204,22 @@ static void displayTask(void *pv) {
               fanState = true;
               sendActuatorCommand();
               break;
+
             case 4:  // Fan OFF
               fanState = false;
               sendActuatorCommand();
               break;
-            case 5:  // Heater ON
+
+            case 5:  // Heater ON (ramp up to 200)
               heaterState = true;
-              sendActuatorCommand();
+              rampHeaterTo(200);
               break;
-            case 6:  // Heater OFF
-              heaterState = false;
-              sendActuatorCommand();
+
+            case 6:  // Heater OFF (ramp down to 0)
+              heaterState = false;   // ramp will keep heaterState consistent anyway
+              rampHeaterTo(0);
               break;
+
             default:
               // Sensor items (0-2): display only, no action
               break;
@@ -179,9 +229,9 @@ static void displayTask(void *pv) {
 
         case ENC_SELECT_LONG:
           // Long press = emergency OFF (all actuators off)
-          fanState    = false;
-          heaterState = false;
-          sendActuatorCommand();
+          fanState = false;
+          rampHeaterTo(0);      // smooth heater off
+          heaterState = false;  // just to be explicit
           selected = 0;
           Serial.println("[DISPLAY] LONG PRESS -> ALL OFF");
           delay(100);
@@ -197,9 +247,8 @@ static void displayTask(void *pv) {
 }
 
 // =======================
-// ===== INIT =========
+// ===== INIT ============
 // =======================
-
 void displayInit() {
   display.init();
   display.clear();
