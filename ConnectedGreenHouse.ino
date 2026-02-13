@@ -7,7 +7,7 @@
 #include "encoderTask.h"
 #include "displayTask.h"
 #include "i2cSensorsTask.h"
-//#include "radioMqttTask.h"
+#include "radioMqttTask.h"
 #include "RTOSQueues.h"
 #include "LogicTask.h"
 
@@ -50,7 +50,7 @@ void setup() {
   sensorsInit();
   displayInit();
   logicInit();
-  //mqttInit(); 
+  mqttInit(); 
   Serial.println("Main::setup Module Initialization completed.");
 
   //--------------------------------------------- Task Creation ---------------------------------------------//
@@ -58,7 +58,7 @@ void setup() {
   sensorsStartTask();
   displayStartTask();
   logicStartTask();
-  //mqttStartTask();
+  mqttStartTask();
   Serial.println("Main::setup Creation of Tasks completed.");
 
 }

@@ -1,13 +1,16 @@
 // ============================================================================
 //  encoderTask.cpp — Student 1: Rotary Encoder + Button → FreeRTOS Queue
 //  Board : Heltec WiFi LoRa 32 V3 (ESP32-S3)
-//  Pins  : CLK = GPIO 26 (J3:04), DT = GPIO 37 (J3:11), BTN = GPIO 0 (J2:08)
+//  Pins  : CLK = GPIO 20 (J2:17), DT = GPIO 19 (J2:18), BTN = GPIO 0 (J2:08)
 // ============================================================================
 
 #include <Arduino.h>
 #include <RotaryEncoder.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+// ESP-IDF driver — needed to reclaim GPIO 19/20 from USB peripheral
+#include "driver/gpio.h"
 
 #include "encoderTask.h"
 #include "RTOSQueues.h"
@@ -70,9 +73,9 @@ static void encoderTask(void *pv) {
 
     // --- Heartbeat every 5 seconds ---
     if (millis() - lastDiagMs > 5000) {
-      Serial.printf("[ENC] CLK=%d DT=%d BTN=%d pos=%d\n",
-                    digitalRead(GPIO_ENC_CLK), digitalRead(GPIO_ENC_DT),
-                    digitalRead(GPIO_BOARD_BP), pEncoder->getPosition());
+      //Serial.printf("[ENC] CLK=%d DT=%d BTN=%d pos=%d\n",
+       //             digitalRead(GPIO_ENC_CLK), digitalRead(GPIO_ENC_DT),
+        //            digitalRead(GPIO_BOARD_BP), pEncoder->getPosition());
       lastDiagMs = millis();
     }
 
@@ -141,8 +144,47 @@ static void encoderTask(void *pv) {
 // INIT
 // ==========================================
 
+// void encoderInit() {
+//   // =====================================================================
+//   // GPIO 19/20 are shared with USB on ESP32-S3.
+//   // Since Heltec V3 uses CP2102 (GPIO 43/44) for serial,
+//   // we MUST reclaim GPIO 19/20 from the USB peripheral.
+//   // =====================================================================
+
+//   // Reset GPIO from any peripheral assignment back to plain GPIO
+//   // (reclaims GPIO 19/20 from USB — safe because Heltec V3 uses CP2102 on GPIO 43/44)
+//   gpio_reset_pin((gpio_num_t)GPIO_ENC_CLK);   // GPIO 20
+//   gpio_reset_pin((gpio_num_t)GPIO_ENC_DT);    // GPIO 19
+
+//   // Configure as digital input with pull-up
+//   gpio_set_direction((gpio_num_t)GPIO_ENC_CLK, GPIO_MODE_INPUT);
+//   gpio_set_pull_mode((gpio_num_t)GPIO_ENC_CLK, GPIO_PULLUP_ONLY);
+//   gpio_set_direction((gpio_num_t)GPIO_ENC_DT,  GPIO_MODE_INPUT);
+//   gpio_set_pull_mode((gpio_num_t)GPIO_ENC_DT,  GPIO_PULLUP_ONLY);
+
+//   // Also set Arduino layer
+//   pinMode(GPIO_ENC_CLK,  INPUT_PULLUP);
+//   pinMode(GPIO_ENC_DT,   INPUT_PULLUP);
+//   pinMode(GPIO_BOARD_BP, INPUT_PULLUP);
+//   delay(10);
+
+//   Serial.printf("Encoder pins: CLK=GPIO%d(%d) DT=GPIO%d(%d) BTN=GPIO%d(%d)\n",
+//                 GPIO_ENC_CLK, digitalRead(GPIO_ENC_CLK),
+//                 GPIO_ENC_DT,  digitalRead(GPIO_ENC_DT),
+//                 GPIO_BOARD_BP, digitalRead(GPIO_BOARD_BP));
+
+//   // Create encoder object
+//   pEncoder = new RotaryEncoder(GPIO_ENC_DT, GPIO_ENC_CLK,
+//                                RotaryEncoder::LatchMode::FOUR0);
+
+//   // Attach edge-triggered interrupts on both pins
+//   attachInterrupt(digitalPinToInterrupt(GPIO_ENC_CLK), checkPosition, CHANGE);
+//   attachInterrupt(digitalPinToInterrupt(GPIO_ENC_DT),  checkPosition, CHANGE);
+
+//   Serial.println("Main::initEncoder completed.");
+// }
+
 void encoderInit() {
-  // Configure encoder pins as input with internal pull-up
   pinMode(GPIO_ENC_CLK,  INPUT_PULLUP);
   pinMode(GPIO_ENC_DT,   INPUT_PULLUP);
   pinMode(GPIO_BOARD_BP, INPUT_PULLUP);
@@ -153,16 +195,15 @@ void encoderInit() {
                 GPIO_ENC_DT,  digitalRead(GPIO_ENC_DT),
                 GPIO_BOARD_BP, digitalRead(GPIO_BOARD_BP));
 
-  // Create encoder object
   pEncoder = new RotaryEncoder(GPIO_ENC_DT, GPIO_ENC_CLK,
                                RotaryEncoder::LatchMode::FOUR0);
 
-  // Attach edge-triggered interrupts on both pins
   attachInterrupt(digitalPinToInterrupt(GPIO_ENC_CLK), checkPosition, CHANGE);
   attachInterrupt(digitalPinToInterrupt(GPIO_ENC_DT),  checkPosition, CHANGE);
 
   Serial.println("Main::initEncoder completed.");
 }
+
 
 void encoderStartTask() {
   xTaskCreate(encoderTask, "Encoder", 3072, nullptr, 1, &hEncoder);
