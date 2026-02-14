@@ -148,7 +148,7 @@ static void onMessage(char* topic, byte* payload, unsigned int length) {
   Serial.print("Heater setpoint: ");    Serial.print(heaterSetpoint);   Serial.println(" °C");
   Serial.print("Heater ± range: ");     Serial.print(heaterRange);      Serial.println(" °C");
   Serial.print("Heater hysteresis: ");  Serial.print(heaterHysteresis); Serial.println(" °C");
-  Serial.print("Heater persistence: "); Serial.print(heaterPersist);    Serial.println(" s");
+  Serial.print("setpoint_light_level_lux "); Serial.print(heaterPersist);    Serial.println(" s");
 
   Serial.print("Fan setpoint: ");       Serial.print(fanSetpoint);      Serial.println(" %RH");
   Serial.print("Fan ± range: ");        Serial.print(fanRange);         Serial.println(" %RH");
@@ -173,7 +173,7 @@ static void onMessage(char* topic, byte* payload, unsigned int length) {
   // Tuning
   cmd.heaterRange_C   = isnan(heaterRange)      ? 0.0f : heaterRange;
   cmd.heaterHyst_C    = isnan(heaterHysteresis) ? 0.0f : heaterHysteresis;
-  cmd.heaterPersist_s = (heaterPersist < 0)     ? 0    : (uint16_t)heaterPersist;
+  cmd.luxTarget = (heaterPersist < 0)     ? 0    : (uint16_t)heaterPersist;
 
   cmd.fanRange_RH   = isnan(fanRange)      ? 0.0f : fanRange;
   cmd.fanHyst_RH    = isnan(fanHysteresis) ? 0.0f : fanHysteresis;
